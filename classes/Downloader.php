@@ -16,6 +16,7 @@ class Downloader
     private $streamsNum;
 
     private $fileInfo = [];
+    private $bar = null;
 
     public function __construct($url, $streamsNum = 4)
     {
@@ -43,6 +44,7 @@ class Downloader
 
         $this->fileInfo = $this->GetFileData($url);
         $this->streamsNum = is_integer($streamsNum) && $streamsNum > 1 && $this->fileInfo['acceptRanges'] ? $streamsNum : 1;
+        $this->bar = $this->fileInfo['length'] ? new PHPTerminalProgressBar($this->fileInfo['length']) : null;
     }
 
     public function DownloadFile()
@@ -141,14 +143,6 @@ class Downloader
                         $data[$sid]['length'] += $length;
                         $downloaded += $length;
                         $skipped_headers[$sid] = true;
-
-                        // if ( $sid == min(array_keys($streams_r)) )
-                        // {
-                        //     $this->Log($sid, 'min1');
-
-                        //     fwrite($file, $data[$sid]['data']);
-                        //     $data[$sid]['data'] = '';
-                        // }
                     }
 
                     continue;
@@ -173,13 +167,14 @@ class Downloader
                 }
                 else $data[$sid]['data'] .= $row;
 
-                var_dump("{$sid}|{$streams_size[$sid]['qty']}|{$data[$sid]['length']}");
+                // var_dump("{$sid}|{$streams_size[$sid]['qty']}|{$data[$sid]['length']}");
+                if ( $this->bar ) $this->bar->update($downloaded);
 
                 if ( feof($r) || $streams_size[$sid]['qty'] == $data[$sid]['length'] )
                 {
                     fclose($r);
 
-                    var_dump('FEOF');
+                    // var_dump('FEOF');
 
                     // print_r($streams_size);
                     // print_r($data);
