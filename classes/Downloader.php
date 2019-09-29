@@ -69,9 +69,11 @@ class Downloader
 
             if ( $data )
             {
+                $min = min(array_keys($data));
                 foreach ( $data as $sid => $d )
-                    if ( $d['isDone'] && $d['data'] )
+                    if ( $d['isDone'] && $sid == $min )
                     {
+                        $this->Log($sid, 'min2');
                         fwrite($file, $d['data']);
                         unset($data[$sid]);
                     }
@@ -88,11 +90,14 @@ class Downloader
                 $to = $pieces['size_per_stream'] * $id;
                 $streams_size[$id] = [
                     'from' => $pieces['size_per_stream'] * ($id - 1),
-                    'to' => $to > $this->fileInfo['length'] ? $this->fileInfo['length'] - 1 : $to
+                    'to' => $to > $this->fileInfo['length'] ? $this->fileInfo['length'] : $to
                 ];
 
                 if ( $streams_size[$id]['from'] ) $streams_size[$id]['from']++;
-                $streams_size[$id]['qty'] = $streams_size[$id]['to'] - $streams_size[$id]['from'] + 1;
+
+                $streams_size[$id]['qty'] = $streams_size[$id]['to'] - $streams_size[$id]['from'];
+                if ( $streams_size[$id]['to'] != $this->fileInfo['length'] )
+                    $streams_size[$id]['qty']++;
 
                 $this->Log('*** streams_size ***', 'download');
                 $this->Log($streams_size, 'download');
@@ -100,7 +105,7 @@ class Downloader
                 $pieces['pieces']--;
                 continue;
             }
-            elseif ( !$num && !count($streams_r) )
+            elseif ( !$num && !count($streams_r) && !count($data) )
             {
                 fclose($file);
                 break;
@@ -136,7 +141,7 @@ class Downloader
 
                     if ( ( $pos = strpos($data[$sid]['data'], "\r\n\r\n") ) !== false )
                     {
-                        $this->Log($data[$sid], "stream_{$sid}");
+                        // $this->Log($data[$sid], "stream_{$sid}");
 
                         $data[$sid]['data'] = substr($data[$sid]['data'], $pos+4, strlen($data[$sid]['data']));
                         $length = strlen($data[$sid]['data']);
@@ -177,7 +182,8 @@ class Downloader
                     // var_dump('FEOF');
 
                     // print_r($streams_size);
-                    // print_r($data);
+                    $this->Log("*** Data ***", 'download');
+                    $this->Log("{$sid} - {$data[$sid]['length']}", 'download');
                     $this->Log($downloaded);
 
                     // Eсли поток не скачал указанное к-во байт
@@ -193,6 +199,7 @@ class Downloader
                     // }
 
                     $data[$sid]['isDone'] = true;
+                    if ( $data[$sid]['data'] == '' ) unset($data[$sid]);
                     unset($streams_r[$sid]);
                 }
             }
