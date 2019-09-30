@@ -7,45 +7,114 @@ pcntl_signal(SIGINT, function($signo) {
     exit;
 });
 
-class PHPTerminalProgressBar extends Notifier
+class ProgressBar extends Notifier
 {
     const MOVE_START = "\033[1G";
     const HIDE_CURSOR = "\033[?25l";
     const SHOW_CURSOR = "\033[?25h";
     const ERASE_LINE = "\033[2K";
 
-    // Available screen width
+    /**
+     * Available screen width
+     * @var integer
+     */
     private $width;
-    // Ouput stream. Usually STDOUT or STDERR
+
+    /**
+     * Ouput stream. Usually STDOUT or STDERR
+     * @var resource
+     */
     private $stream;
-    // Output string format
+
+    /**
+     * Output string format
+     * @var string
+     */
     private $format;
-    // Time the progress bar was initialised in seconds (with millisecond precision)
+
+    /**
+     * Time the progress bar was initialised in seconds (with millisecond precision)
+     * @var integer
+     */
     private $startTime;
-    // Time since the last draw
+
+    /**
+     * Time since the last draw
+     * @var integer
+     */
     private $timeSinceLastCall;
-    // Pre-defined tokens in the format
+
+    /**
+     * Pre-defined tokens in the format
+     * @var array
+     */
     private $ouputFind = array(':current', ':total', ':elapsed', ':percent', ':eta', ':rate');
-    // Do not run drawBar more often than this (bypassed by interupt())
+
+    /**
+     * Do not run drawBar more often than this (bypassed by interupt())
+     * @var float
+     */
     public $throttle = 0.016; // 16 ms
-    // The symbol to denote completed parts of the bar
+
+    /**
+     * The symbol to denote completed parts of the bar
+     * @var string
+     */
     public $symbolComplete = "=";
-    // The symbol to denote incomplete parts of the bar
+
+    /**
+     * The symbol to denote incomplete parts of the bar
+     * @var string
+     */
     public $symbolIncomplete = " ";
-    // Current tick number
+
+    /**
+     * Current tick number
+     * @var integer
+     */
     public $current = 0;
-    // Maximum number of ticks
+
+    /**
+     * Maximum number of ticks
+     * @var integer
+     */
     public $total = 1;
-    // Seconds elapsed
+
+    /**
+     * Seconds elapsed
+     * @var integer
+     */
     public $elapsed = 0;
-    // Current percentage complete
+
+    /**
+     * Current percentage complete
+     * @var integer
+     */
     public $percent = 0;
-    // Estimated time until completion
+
+    /**
+     * Estimated time until completion
+     * @var integer
+     */
     public $eta = 0;
-    // Current rate
+
+    /**
+     * Current rate
+     * @var integer
+     */
     public $rate = 0;
 
-    public function __construct($total = 1, $format = "Progress: [:bar] - :current/:total - :percent% - Elapsed::elapseds - ETA::etas - Rate::rate/s", $stream = STDERR) {
+    /**
+     * Initialization
+     *
+     * @param integer $total
+     * @param string $format
+     * @param resource $stream
+     *
+     * @return void
+     */
+    public function __construct($total = 1, $format = "Progress: [:bar] - :current/:total - :percent% - Elapsed::elapseds - ETA::etas - Rate::rate/s", $stream = STDERR)
+    {
         // Get the terminal width
         $this->width = exec("tput cols");
         if (!is_numeric($this->width)) {
@@ -71,12 +140,23 @@ class PHPTerminalProgressBar extends Notifier
     /**
      * Add $amount of ticks. Usually 1, but maybe different amounts if calling
      * this on a timer or other unstable method, like a file download.
+     *
+     * @param integer $amount
+     * @return void
      */
-    public function tick($amount = 1) {
+    public function tick($amount = 1)
+    {
         $this->update($this->current + $amount);
     }
 
-    public function update($amount) {
+    /**
+     * Set $amount of ticks
+     *
+     * @param integer $amount
+     * @return void
+     */
+    public function update($amount)
+    {
         $this->current = $amount;
         $this->elapsed = microtime(true) - $this->startTime;
         $this->percent = $this->current / $this->total * 100;
@@ -90,21 +170,29 @@ class PHPTerminalProgressBar extends Notifier
 
     /**
      * Add a message on a newline before the progress bar
+     *
+     * @param string $message
      */
-    public function interupt($message) {
+    public function interupt($message)
+    {
         fwrite($this->stream, self::MOVE_START);
         fwrite($this->stream, self::ERASE_LINE);
-        // fwrite($this->stream, $message);
-        // fwrite($this->stream, cli_red);
-		// fwrite($this->stream, cli_bold);
-		// fwrite($this->stream, $message . cli_reset . "\n");
+
+        fwrite($this->stream, self::COLOR_BLUE);
+        fwrite($this->stream, self::ERASE_END);
+        fwrite($this->stream, $message);
+        fwrite($this->stream, self::RESET);
+        fwrite($this->stream, "\n");
         $this->drawBar();
     }
 
     /**
-     * Does the actual drawing
+     * Does the actual
+     *
+     * @return void
      */
-    private function drawBar() {
+    private function drawBar()
+    {
         $this->timeSinceLastCall = microtime(true);
         fwrite($this->stream, self::MOVE_START);
 
@@ -131,8 +219,12 @@ class PHPTerminalProgressBar extends Notifier
 
     /**
      * Adds 0 and space padding onto floats to ensure the format is fixed length nnn.nn
+     *
+     * @param string $input
+     * @return string
      */
-    private function roundAndPadd($input) {
+    private function roundAndPadd($input)
+    {
         $parts = explode(".", round($input, 2));
         $output = $parts[0];
         if (isset($parts[1])) {
@@ -146,12 +238,16 @@ class PHPTerminalProgressBar extends Notifier
 
     /**
      * Cleanup
+     *
+     * @return void
      */
-    public function end() {
+    public function end()
+    {
         fwrite($this->stream, "\n" . self::SHOW_CURSOR);
     }
 
-    public function __destruct() {
+    public function __destruct()
+    {
         $this->end();
     }
 

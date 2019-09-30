@@ -44,7 +44,7 @@ class Downloader
 
         $this->fileInfo = $this->GetFileData($url);
         $this->streamsNum = is_integer($streamsNum) && $streamsNum > 1 && $this->fileInfo['acceptRanges'] ? $streamsNum : 1;
-        $this->bar = $this->fileInfo['length'] ? new PHPTerminalProgressBar($this->fileInfo['length']) : null;
+        $this->bar = $this->fileInfo['length'] ? new ProgressBar($this->fileInfo['length']) : null;
     }
 
     public function DownloadFile()
