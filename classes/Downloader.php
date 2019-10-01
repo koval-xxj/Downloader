@@ -52,7 +52,7 @@ class Downloader
         $streams_r = $streams = $data = $streams_bytes = $skipped_headers = [];
         $pieces = $this->CountDownloadPiecesNum();
 
-        $dwld_file = "{$this->downloadPath}/.download.file.{$this->fileInfo['type']}";
+        $dwld_file = "{$this->downloadPath}.download.file.{$this->fileInfo['type']}";
 
         $this->Log('*** fileInfo ***', 'download');
         $this->Log($this->fileInfo, 'download');
@@ -61,6 +61,8 @@ class Downloader
 
         if ( ($file = fopen($dwld_file, 'w')) === false )
             throw new RuntimeException("Error to open the file {$dwld_file}");
+
+        $this->bar->interupt('Creating streams');
 
         $downloaded = 0;
         while ( true )
@@ -73,7 +75,7 @@ class Downloader
                 foreach ( $data as $sid => $d )
                     if ( $d['isDone'] && $sid == $min )
                     {
-                        $this->Log($sid, 'min2');
+                        $this->Log("{$sid} - data", 'min2');
                         fwrite($file, $d['data']);
                         unset($data[$sid]);
                     }
@@ -114,6 +116,9 @@ class Downloader
             $st_read = $streams_r;
             $st_write = $streams;
             $e = null;
+
+            if ( !$st_read && !$st_write ) continue;
+
             stream_select($st_read, $st_write, $e, 2, 1);
 
             foreach ( $st_write as $sid => $w )
@@ -141,7 +146,7 @@ class Downloader
 
                     if ( ( $pos = strpos($data[$sid]['data'], "\r\n\r\n") ) !== false )
                     {
-                        // $this->Log($data[$sid], "stream_{$sid}");
+                        $this->Log($data[$sid], "stream_{$sid}");
 
                         $data[$sid]['data'] = substr($data[$sid]['data'], $pos+4, strlen($data[$sid]['data']));
                         $length = strlen($data[$sid]['data']);
@@ -180,8 +185,7 @@ class Downloader
                     fclose($r);
 
                     // var_dump('FEOF');
-
-                    // print_r($streams_size);
+                    // $this->bar->interupt("Downloaded {$downloaded}");
                     $this->Log("*** Data ***", 'download');
                     $this->Log("{$sid} - {$data[$sid]['length']}", 'download');
                     $this->Log($downloaded);
@@ -218,9 +222,6 @@ class Downloader
         {
             if ( !$fp = stream_socket_client("tcp://{$this->ip}:{$this->port}", $err_num, $err_msg, 30) )
             {
-                // $error_code = socket_last_error();
-                // $errormsg = socket_strerror($errorcode);
-                // socket_clear_error();
                 $i++;
                 continue;
             }
@@ -233,7 +234,7 @@ class Downloader
             return $fp;
         }
 
-        throw new RuntimeException($err_msg, $err_num);
+        throw new RuntimeException("Error to create stream: {$err_msg}", $err_num);
     }
 
     private function GetFileData($url)

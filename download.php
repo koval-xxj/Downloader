@@ -7,15 +7,6 @@ spl_autoload_register(function ($class) {
     if ( file_exists($file) ) require_once $file;
 });
 
-// Notifier::ShowNotify('message');
-// Notifier::ShowError('Error');
-// Notifier::ShowWarning('Warning');
-// Notifier::ShowNotice('Notice');
-// Notifier::ShowSuccess('Success');
-// Notifier::ShowNotify('message');
-
-// exit;
-
 try
 {
     $dwnld = new Downloader('http://ukrposhta.ua/postindex/upload/postvpz.zip', 2);
@@ -23,5 +14,5 @@ try
 }
 catch ( RuntimeException $e )
 {
-    var_dump('MESSAGE: '.$e->getMessage().', CODE: '.$e->getCode());
+    Notifier::ShowError('Error: '.$e->getMessage());
 }
