@@ -49,7 +49,7 @@ class Downloader
 
     public function DownloadFile()
     {
-        $streams_r = $streams = $data = $streams_bytes = $skipped_headers = [];
+        $streams_r = $streams = $streams_data = [];
         $pieces = $this->CountDownloadPiecesNum();
 
         $dwld_file = "{$this->downloadPath}.download.file.{$this->fileInfo['type']}";
@@ -69,15 +69,15 @@ class Downloader
         {
             $num = count($streams);
 
-            if ( $data )
+            if ( $streams_data )
             {
-                $min = min(array_keys($data));
-                foreach ( $data as $sid => $d )
+                $min = min(array_keys($streams_data));
+                foreach ( $streams_data as $sid => $d )
                     if ( $d['isDone'] && $sid == $min )
                     {
                         $this->Log("{$sid} - data", 'min2');
                         fwrite($file, $d['data']);
-                        unset($data[$sid]);
+                        unset($streams_data[$sid]);
                     }
             }
 
@@ -86,28 +86,29 @@ class Downloader
                 $new_stream = $this->CreateStream();
                 $id = $num+1;
                 $streams[$id] = $new_stream;
-                $skipped_headers[$id] = false;
-                $data[$id] = ['length' => 0, 'data' => '', 'isDone' => false];
+
+                $streams_data[$id]['skipped_headers'] = false;
+                $streams_data[$id]['length'] = 0;
+                $streams_data[$id]['data'] = '';
+                $streams_data[$id]['isDone'] = false;
 
                 $to = $pieces['size_per_stream'] * $id;
-                $streams_size[$id] = [
-                    'from' => $pieces['size_per_stream'] * ($id - 1),
-                    'to' => $to > $this->fileInfo['length'] ? $this->fileInfo['length'] : $to
-                ];
+                $streams_data[$id]['from'] = $pieces['size_per_stream'] * ($id - 1);
+                $streams_data[$id]['to'] = $to > $this->fileInfo['length'] ? $this->fileInfo['length'] : $to;
 
-                if ( $streams_size[$id]['from'] ) $streams_size[$id]['from']++;
+                if ( $streams_data[$id]['from'] ) $streams_data[$id]['from']++;
 
-                $streams_size[$id]['qty'] = $streams_size[$id]['to'] - $streams_size[$id]['from'];
-                if ( $streams_size[$id]['to'] != $this->fileInfo['length'] )
-                    $streams_size[$id]['qty']++;
+                $streams_data[$id]['qty'] = $streams_data[$id]['to'] - $streams_data[$id]['from'];
+                if ( $streams_data[$id]['to'] != $this->fileInfo['length'] )
+                    $streams_data[$id]['qty']++;
 
                 $this->Log('*** streams_size ***', 'download');
-                $this->Log($streams_size, 'download');
+                $this->Log($streams_data, 'download');
 
                 $pieces['pieces']--;
                 continue;
             }
-            elseif ( !$num && !count($streams_r) && !count($data) )
+            elseif ( !$num && !count($streams_r) && !count($streams_data) )
             {
                 fclose($file);
                 break;
@@ -125,7 +126,7 @@ class Downloader
             {
                 $header = "GET {$this->path} HTTP/1.1\r\n";
                 $header .= "Host: {$this->host}\r\n";
-                if ( $this->streamsNum > 1 ) $header .= "Range: bytes=".$streams_size[$sid]['from']."-".$streams_size[$sid]['to']."\r\n";
+                if ( $this->streamsNum > 1 ) $header .= "Range: bytes=".$streams_data[$sid]['from']."-".$streams_data[$sid]['to']."\r\n";
                 $header .= "Accept: */*\r\n\r\n";
 
                 $this->Log('*** header ***', 'download');
@@ -140,19 +141,19 @@ class Downloader
             {
                 $row = fread($r, 8192);
 
-                if ( !$skipped_headers[$sid] )
+                if ( !$streams_data[$sid]['skipped_headers'] )
                 {
-                    $data[$sid]['data'] .= $row;
+                    $streams_data[$sid]['data'] .= $row;
 
-                    if ( ( $pos = strpos($data[$sid]['data'], "\r\n\r\n") ) !== false )
+                    if ( ( $pos = strpos($streams_data[$sid]['data'], "\r\n\r\n") ) !== false )
                     {
-                        $this->Log($data[$sid], "stream_{$sid}");
+                        $this->Log($streams_data[$sid], "stream_{$sid}");
 
-                        $data[$sid]['data'] = substr($data[$sid]['data'], $pos+4, strlen($data[$sid]['data']));
-                        $length = strlen($data[$sid]['data']);
-                        $data[$sid]['length'] += $length;
+                        $streams_data[$sid]['data'] = substr($streams_data[$sid]['data'], $pos+4, strlen($streams_data[$sid]['data']));
+                        $length = strlen($streams_data[$sid]['data']);
+                        $streams_data[$sid]['length'] += $length;
                         $downloaded += $length;
-                        $skipped_headers[$sid] = true;
+                        $streams_data[$sid]['skipped_headers'] = true;
                     }
 
                     continue;
@@ -160,50 +161,50 @@ class Downloader
                 else
                 {
                     $length = strlen($row);
-                    $data[$sid]['length'] += $length;
+                    $streams_data[$sid]['length'] += $length;
                     $downloaded += $length;
                 }
 
                 // Записываю данные из потока в очереди
                 if ( $sid == min(array_keys($streams_r)) )
                 {
-                    if ( $data[$sid]['data'] )
+                    if ( $streams_data[$sid]['data'] )
                     {
-                        fwrite($file, $data[$sid]['data']);
-                        $data[$sid]['data'] = '';
+                        fwrite($file, $streams_data[$sid]['data']);
+                        $streams_data[$sid]['data'] = '';
                     }
                     $this->Log($sid, 'min2');
                     fwrite($file, $row);
                 }
-                else $data[$sid]['data'] .= $row;
+                else $streams_data[$sid]['data'] .= $row;
 
-                // var_dump("{$sid}|{$streams_size[$sid]['qty']}|{$data[$sid]['length']}");
+                // var_dump("{$sid}|{$streams_data[$sid]['qty']}|{$streams_data[$sid]['length']}");
                 if ( $this->bar ) $this->bar->update($downloaded);
 
-                if ( feof($r) || $streams_size[$sid]['qty'] == $data[$sid]['length'] )
+                if ( feof($r) || $streams_data[$sid]['qty'] == $streams_data[$sid]['length'] )
                 {
                     fclose($r);
 
                     // var_dump('FEOF');
                     // $this->bar->interupt("Downloaded {$downloaded}");
                     $this->Log("*** Data ***", 'download');
-                    $this->Log("{$sid} - {$data[$sid]['length']}", 'download');
+                    $this->Log("{$sid} - {$streams_data[$sid]['length']}", 'download');
                     $this->Log($downloaded);
 
                     // Eсли поток не скачал указанное к-во байт
-                    // if ( $streams_size[$sid]['qty'] > $data[$sid]['length'] )
+                    // if ( $streams_data[$sid]['qty'] > $streams_data[$sid]['length'] )
                     // {
                     //     // открыть новый поток и докачать нужное к-во байт
                     //     $streams[$sid] = $this->CreateStream();
-                    //     $skipped_headers[$sid] = false;
+                    //     $streams_data[$sid]['skipped_headers'] = false;
 
-                    //     $streams_size[$sid]['from'] = $streams_size[$sid]['from'] + $data[$sid]['length'];
-                    //     $streams_size[$id]['qty'] = $streams_size[$sid]['to'] - $streams_size[$id]['from'];
-                    //     $data[$sid] = ['length' => 0, 'data' => ''];
+                    //     $streams_data[$sid]['from'] = $streams_data[$sid]['from'] + $streams_data[$sid]['length'];
+                    //     $streams_data[$id]['qty'] = $streams_data[$sid]['to'] - $streams_data[$id]['from'];
+                    //     $streams_data[$sid] = ['length' => 0, 'data' => ''];
                     // }
 
-                    $data[$sid]['isDone'] = true;
-                    if ( $data[$sid]['data'] == '' ) unset($data[$sid]);
+                    $streams_data[$sid]['isDone'] = true;
+                    if ( $streams_data[$sid]['data'] == '' ) unset($streams_data[$sid]);
                     unset($streams_r[$sid]);
                 }
             }

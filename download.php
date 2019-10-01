@@ -9,7 +9,7 @@ spl_autoload_register(function ($class) {
 
 try
 {
-    $dwnld = new Downloader('http://ukrposhta.ua/postindex/upload/postvpz.zip', 2);
+    $dwnld = new Downloader('http://ukrposhta.ua/postindex/upload/postvpz.zip', 4);
     $dwnld->DownloadFile();
 }
 catch ( RuntimeException $e )
