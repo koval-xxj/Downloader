@@ -163,9 +163,7 @@ class ProgressBar extends Notifier
         $this->rate = $this->current / $this->elapsed;
         $this->eta = ($this->current) ? ($this->elapsed / $this->current * $this->total - $this->elapsed) : false;
         $drawElapse = microtime(true) - $this->timeSinceLastCall;
-        // if ($drawElapse > $this->throttle) {
         $this->drawBar();
-        // }
     }
 
     /**

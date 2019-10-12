@@ -6,7 +6,7 @@ class Downloader
      * Attempts to create a stream
      */
     const CONN_ATTEMTS_NUM = 3;
-    const DEBUG = true;
+    const DEBUG = false;
 
     /**
      * Perpetual cycle loop insurance
@@ -95,14 +95,12 @@ class Downloader
         if ( ($file = fopen($dwld_file, 'w')) === false )
             throw new RuntimeException("Error to open the file {$dwld_file}");
 
-        Notifier::ShowNotice('Download start');
+        Notifier::ShowNotice("The download is starting in {$this->streamsNum} streams");
 
         if ( !$this->fileInfo['length'] )
             $bar = new ProgressBar(1, $format = "Downloaded :current MB - Elapsed::elapseds - ETA::etas - Rate::rate/s");
         else
             $bar = new ProgressBar($this->fileInfo['length']);
-
-        if ( $this->streamsNum > 1 ) $bar->interupt('Creating streams');
 
         $downloaded = 0;
         while ( true )
@@ -119,8 +117,6 @@ class Downloader
                     }
             }
 
-            $num = count($streams);
-
             if ( $not_finished_streams )
             {
                 foreach ( $not_finished_streams as $sid => $data )
@@ -132,7 +128,7 @@ class Downloader
                     }
             }
             // Calculating the download part per stream
-            elseif ( $num < $this->streamsNum && count($streams_r) < $this->streamsNum && $pieces['pieces'] )
+            elseif ( count($streams) < $this->streamsNum && count($streams_r) < $this->streamsNum && $pieces['pieces'] )
             {
                 $id = $pieces['cnt'];
                 $streams[$id] = $this->CreateStream();
@@ -159,7 +155,7 @@ class Downloader
                 $pieces['cnt']++;
                 continue;
             }
-            elseif ( !$num && !count($streams_r) && !count($streams_data) )
+            elseif ( !count($streams) && !count($streams_r) && !count($streams_data) )
             {
                 fclose($file);
                 break;
@@ -300,6 +296,12 @@ class Downloader
         else Notifier::ShowNotice("\nThe file path: {$file}");
     }
 
+    /**
+     * Creating a stream
+     *
+     * @throws RuntimeException
+     * @return resource
+     */
     private function CreateStream()
     {
         $i = 0;
@@ -336,6 +338,8 @@ class Downloader
      * Getting file info by url
      *
      * @param $url - file url
+     *
+     * @throws RuntimeException
      * @return array
      */
     private function GetUrlInfo($url)
@@ -393,6 +397,13 @@ class Downloader
         return $data;
     }
 
+    /**
+     * Get file extension by Mime
+     *
+     * @param string $mime
+     *
+     * @return string
+     */
     private function GetFileExpByMime($mime)
     {
         $types = [
@@ -565,16 +576,22 @@ class Downloader
         return isset($types[$mime]) ? $types[$mime] : 'txt';
     }
 
+    /**
+     * Calculate the number of pieces to download
+     *
+     * @return array
+     */
     private function CountDownloadPiecesNum()
     {
         if ( $this->streamsNum > 1 )
         {
+            $size_per_stream = 1048576;
             $memory_limit = $this->GetMemoryLimit();
-            if ( $memory_limit == -1 || $memory_limit > $this->fileInfo['length'] )
-                return ['size_per_stream' => intval(ceil($this->fileInfo['length']/$this->streamsNum)), 'pieces' => $this->streamsNum];
+            $size = $size_per_stream * $this->streamsNum;
+            $size = $memory_limit > 0 && $memory_limit < $size ? $memory_limit : $size;
+            $size_per_stream = $this->fileInfo['length'] < $size ? ceil($this->fileInfo['length']/$this->streamsNum) : ceil($size/$this->streamsNum);
 
-            $pieces = ceil($this->fileInfo['length']/$memory_limit);
-            return ['size_per_stream' => intval(ceil($this->fileInfo['length']/$pieces)), 'pieces' => $pieces];
+            return ['size_per_stream' => intval($size_per_stream), 'pieces' => intval(ceil($this->fileInfo['length']/$size_per_stream))];
         }
         else
             return ['size_per_stream' => $this->fileInfo['length'], 'pieces' => 1];
@@ -599,6 +616,12 @@ class Downloader
         return true;
     }
 
+    /**
+     * Getting php memory limit in bytes
+     *
+     * @throws RuntimeException
+     * @return integer
+     */
     public function GetMemoryLimit()
     {
         $reserve = 10485760;
@@ -616,7 +639,9 @@ class Downloader
             case 'k': $limit *= 1024;
         }
 
-        if ( ($limit - $reserve) < 0 )
+        $limit = $limit - $reserve;
+
+        if ( $limit < 0 )
             throw new RuntimeException("Error: Out of the memory");
 
         return $limit;
