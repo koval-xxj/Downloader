@@ -6,7 +6,7 @@ class Downloader
      * Attempts to create a stream
      */
     const CONN_ATTEMTS_NUM = 3;
-    const DEBUG = true;
+    const DEBUG = false;
     /**
      * Reserve memory in bytes for script work
      */
@@ -109,7 +109,7 @@ class Downloader
         Notifier::ShowNotice("The download is starting in {$this->streamsNum} streams");
 
         if ( !$this->fileInfo['length'] )
-            $bar = new ProgressBar(1, $format = "Downloaded :current MB - Elapsed::elapseds - ETA::etas - Rate::rate/s");
+            $bar = new ProgressBar(1, $format = "Downloaded :current MB - Elapsed::elapseds - ETA::etas - Speed::speed/s");
         else
             $bar = new ProgressBar($this->fileInfo['length']);
 
@@ -119,13 +119,12 @@ class Downloader
             if ( $streams_data )
             {
                 $min = min(array_keys($streams_data));
-                foreach ( $streams_data as $sid => $d )
-                    if ( $d['isDone'] && $sid == $min )
-                    {
-                        $this->Log("{$sid} - data", 'min2');
-                        fwrite($file, $d['data']);
-                        unset($streams_data[$sid]);
-                    }
+                if ( !empty($streams_data[$min]) && $streams_data[$min]['isDone'] )
+                {
+                    $this->Log("{$min} - data", 'min2');
+                    fwrite($file, $streams_data[$min]['data']);
+                    unset($streams_data[$min]);
+                }
             }
 
             if ( $not_finished_streams )
@@ -160,7 +159,7 @@ class Downloader
                     $streams_data[$id]['qty']++;
 
                 $this->Log('*** streams_size ***', 'download');
-                $this->Log($streams_data, 'download');
+                $this->Log($streams_data[$id], 'download');
 
                 $pieces['pieces']--;
                 $pieces['cnt']++;
@@ -187,7 +186,7 @@ class Downloader
             if ( $str_status == 0 )
             {
                 // perpetual cycle loop insurance
-                if ( self::WAITING_FOR_DATA_ATTEMTS == $data_atmts_cnt )
+                if ( !self::WAITING_FOR_DATA_ATTEMTS || self::WAITING_FOR_DATA_ATTEMTS == $data_atmts_cnt )
                 {
                     $bar->end();
                     Notifier::ShowWarning('Empty server answer. Interrupting the process');
@@ -196,6 +195,8 @@ class Downloader
                 }
 
                 $data_atmts_cnt++;
+
+                $bar->interupt("Empty server answer. Trying to get the answer. The attempt: {$data_atmts_cnt}/".self::WAITING_FOR_DATA_ATTEMTS);
                 continue;
             }
 
@@ -243,7 +244,7 @@ class Downloader
                 }
 
                 // Записываю данные из потока в очереди
-                if ( $sid == min(array_keys($streams_r)) )
+                if ( $sid == min(array_keys($streams_data)) )
                 {
                     if ( $streams_data[$sid]['data'] )
                     {
