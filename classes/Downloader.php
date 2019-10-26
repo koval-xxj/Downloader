@@ -6,7 +6,12 @@ class Downloader
      * Attempts to create a stream
      */
     const CONN_ATTEMTS_NUM = 3;
-    const DEBUG = false;
+    const DEBUG = true;
+    /**
+     * Reserve memory in bytes for script work
+     */
+    const RESERVE_MEMORY = 10485760;
+    const MAX_STREAMS_NUM = 24;
 
     /**
      * Perpetual cycle loop insurance
@@ -44,22 +49,26 @@ class Downloader
     public function __construct($url, $streamsNum = 4)
     {
         if ( empty($url) || !$url = trim($url) )
-            throw new RuntimeException("The param url must not be empty");
+            throw new DownloaderException("The param url must not be empty");
 
         if ( !defined('PATH_ROOT') )
-            throw new RuntimeException("The constant 'PATH_ROOT' is not defined");
+            throw new DownloaderException("The constant 'PATH_ROOT' is not defined");
 
         $streamsNum = intval($streamsNum);
+
+        if ( $streamsNum > self::MAX_STREAMS_NUM )
+            throw new DownloaderException("The number of streams can't be more than ".self::MAX_STREAMS_NUM);
+
         $this->fileInfo = $this->GetUrlInfo($url);
 
         $this->downloadPath = PATH_ROOT.'downloads/';
         $this->logPath = PATH_ROOT.'log/';
 
         if ( !file_exists($this->downloadPath) && !mkdir($this->downloadPath) )
-            throw new RuntimeException("Unable to create the directory {$this->downloadPath}");
+            throw new DownloaderException("Unable to create the directory {$this->downloadPath}");
 
         if ( self::DEBUG && !file_exists($this->logPath) && !mkdir($this->logPath) )
-            throw new RuntimeException("Unable to create the directory {$this->logPath}");
+            throw new DownloaderException("Unable to create the directory {$this->logPath}");
 
         $this->ip = gethostbyname($this->fileInfo['host']);
         $this->host = $this->fileInfo['host'];
@@ -83,9 +92,11 @@ class Downloader
         $data_atmts_cnt = 0;
         $hasError = false;
 
-        $dwld_file = !empty($this->fileInfo['filename'])
-            ? "{$this->downloadPath}.download.{$this->fileInfo['filename']}"
-            : "{$this->downloadPath}.download.file.{$this->fileInfo['type']}";
+        if ( empty($this->fileInfo['filename']) && empty($this->fileInfo['type']) )
+            throw new DownloaderException("Error to get filename");
+
+        $filename = !empty($this->fileInfo['filename']) ? $this->fileInfo['filename'] : "file.{$this->fileInfo['type']}";
+        $dwld_file = $this->GetFreeFilename($this->downloadPath, ".download.{$filename}");
 
         $this->Log('*** fileInfo ***', 'download');
         $this->Log($this->fileInfo, 'download');
@@ -93,7 +104,7 @@ class Downloader
         $this->Log($pieces, 'download');
 
         if ( ($file = fopen($dwld_file, 'w')) === false )
-            throw new RuntimeException("Error to open the file {$dwld_file}");
+            throw new DownloaderException("Error to open the file {$dwld_file}");
 
         Notifier::ShowNotice("The download is starting in {$this->streamsNum} streams");
 
@@ -171,7 +182,7 @@ class Downloader
             if ( $str_status === false )
             {
                 $bar->end();
-                throw new RuntimeException("Error in downloading the file");
+                throw new DownloaderException("Error in downloading the file");
             }
             if ( $str_status == 0 )
             {
@@ -281,25 +292,40 @@ class Downloader
         }
 
         unset($bar);
-        $file = str_replace('.download.', '', $dwld_file);
 
-        $i = 1;
-        while ( true )
-        {
-            if ( !file_exists($file) ) break;
-            $file = "{$i}_{$file}";
-            $i++;
-        }
-
+        $file = $this->GetFreeFilename($this->downloadPath, $filename);
         rename($dwld_file, $file);
         if ( !$hasError ) Notifier::ShowSuccess("\nThe file downloading is finished.\nThe file path: {$file}");
         else Notifier::ShowNotice("\nThe file path: {$file}");
     }
 
     /**
+     * Added index to the filename if the file exists
+     *
+     * @param string $path
+     * @param string $basename
+     */
+    private function GetFreeFilename($path, $basename)
+    {
+        if ( file_exists($path.$basename) )
+        {
+            $i = 1;
+            while ( true )
+            {
+                if ( !file_exists("{$path}{$i}_{$basename}") ) break;
+                $i++;
+            }
+
+            return "{$path}{$i}_{$basename}";
+        }
+
+        return $path.$basename;
+    }
+
+    /**
      * Creating a stream
      *
-     * @throws RuntimeException
+     * @throws DownloaderException
      * @return resource
      */
     private function CreateStream()
@@ -331,7 +357,7 @@ class Downloader
             return $fp;
         }
 
-        throw new RuntimeException("Error to create stream: {$err_msg}", $err_num);
+        throw new DownloaderException("Error to create stream: {$err_msg}", $err_num);
     }
 
     /**
@@ -339,13 +365,13 @@ class Downloader
      *
      * @param $url - file url
      *
-     * @throws RuntimeException
+     * @throws DownloaderException
      * @return array
      */
     private function GetUrlInfo($url)
     {
         if ( !($parsed_url = parse_url($url)) || empty($parsed_url['host']) || empty($parsed_url['scheme']) || empty($parsed_url['path']) )
-            throw new RuntimeException("Wrong url passed");
+            throw new DownloaderException("Wrong url passed");
 
         $data = [
             'host' => $parsed_url['host'],
@@ -355,7 +381,7 @@ class Downloader
 
         Notifier::ShowNotice('Getting information by url');
 
-        if ( !$headers = get_headers($url, true) ) throw new RuntimeException("Error to get headers by the url: {$url}");
+        if ( !$headers = get_headers($url, true) ) throw new DownloaderException("Error to get headers by the url: {$url}");
 
         if ( !empty($headers['Location']) )
         {
@@ -363,7 +389,7 @@ class Downloader
             $url = $headers['Location'];
 
             if ( !$headers = get_headers($url, true) )
-                throw new RuntimeException("Error to get headers by the redirect url: {$url}");
+                throw new DownloaderException("Error to get headers by the redirect url: {$url}");
 
             $parsed_url = parse_url($url);
             $data['host'] = $parsed_url['host'];
@@ -371,7 +397,7 @@ class Downloader
             $data['path'] = $parsed_url['path'];
         }
 
-        if ( !empty($headers['Content-Disposition']) && $headers['Content-Disposition'] = explode(';', $headers['Content-Disposition']) )
+        if ( !($data['filename'] = basename($url)) && !empty($headers['Content-Disposition']) && $headers['Content-Disposition'] = explode(';', $headers['Content-Disposition']) )
         {
             foreach ( $headers['Content-Disposition'] as $c )
                 if ( strpos($c, 'filename=') !== false )
@@ -387,7 +413,7 @@ class Downloader
             $data['type'] = $this->GetFileExpByMime($headers['Content-Type']);
         }
         else
-            throw new RuntimeException('Error to identify the file type');
+            throw new DownloaderException('Error to identify the file type');
 
         $data['length'] = !empty($headers['Content-Length']) ? intval($headers['Content-Length']) : 0;
         $data['acceptRanges'] = !empty($headers['Accept-Ranges']) && $headers['Accept-Ranges'] != 'none' && $data['length'] > 0 ? true : false;
@@ -619,12 +645,12 @@ class Downloader
     /**
      * Getting php memory limit in bytes
      *
-     * @throws RuntimeException
+     * @throws DownloaderException
      * @return integer
      */
     public function GetMemoryLimit()
     {
-        $reserve = 10485760;
+        $reserve = self::RESERVE_MEMORY;
 
         $limit = ini_get('memory_limit');
         if ( $limit == -1 ) return $limit;
@@ -642,9 +668,14 @@ class Downloader
         $limit = $limit - $reserve;
 
         if ( $limit < 0 )
-            throw new RuntimeException("Error: Out of the memory");
+            throw new DownloaderException("Error: Out of the memory");
 
         return $limit;
     }
+
+}
+
+class DownloaderException extends Exception
+{
 
 }

@@ -8,25 +8,29 @@ spl_autoload_register(function ($class) {
     if ( file_exists($file) ) require_once $file;
 });
 
-$uID = array_search('-u', $argv);
-if ( !$uID || empty($argv[$uID + 1]) || !$url = trim($argv[$uID + 1]) )
-{
-    Notifier::ShowError('The param -u is empty');
-    exit;
-}
-
 $s_num = DEFAULT_STREAMS_NUM;
 
-if ( $sID = array_search('-s', $argv) )
+try
 {
-    $sID++;
-    if ( !empty($argv[$sID]) && !is_numeric($argv[$sID]) )
-    {
-        Notifier::ShowError('The param -s must be numeric');
-        exit;
-    }
+    $uID = array_search('-u', $argv);
+    if ( !$uID || empty($argv[$uID + 1]) || !$url = trim($argv[$uID + 1]) )
+        throw new InvalidArgumentException("The param -u is empty");
 
-    $s_num = !empty($argv[$sID]) ? intval($argv[$sID]) : $s_num;
+    if ( $sID = array_search('-s', $argv) )
+    {
+        $sID++;
+        if ( !empty($argv[$sID]) && !is_numeric($argv[$sID]) )
+            throw new InvalidArgumentException("The param -s must be numeric");
+        elseif ( $argv[$sID] < 0 )
+            throw new InvalidArgumentException("The param -s must be more than zero");
+
+        $s_num = !empty($argv[$sID]) ? intval($argv[$sID]) : $s_num;
+    }
+}
+catch ( InvalidArgumentException $e )
+{
+    Notifier::ShowError($e->getMessage());
+    exit;
 }
 
 try
@@ -34,7 +38,11 @@ try
     $dwnld = new Downloader($url, $s_num);
     $dwnld->DownloadFile();
 }
-catch ( RuntimeException $e )
+catch ( DownloaderException $e )
 {
     Notifier::ShowError('Error: '.$e->getMessage());
+}
+catch ( Exception $e )
+{
+    Notifier::ShowError('Something went wrong');
 }

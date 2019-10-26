@@ -48,7 +48,7 @@ class ProgressBar extends Notifier
      * Pre-defined tokens in the format
      * @var array
      */
-    private $ouputFind = array(':current', ':total', ':elapsed', ':percent', ':eta', ':rate');
+    private $ouputFind = array(':current', ':total', ':elapsed', ':percent', ':eta', ':speed');
 
     /**
      * Do not run drawBar more often than this (bypassed by interupt())
@@ -99,10 +99,10 @@ class ProgressBar extends Notifier
     public $eta = 0;
 
     /**
-     * Current rate
+     * Current speed
      * @var integer
      */
-    public $rate = 0;
+    public $speed = 0;
 
     /**
      * Initialization
@@ -113,7 +113,7 @@ class ProgressBar extends Notifier
      *
      * @return void
      */
-    public function __construct($total = 1, $format = "Progress: [:bar] - :current/:total - :percent% - Elapsed::elapseds - ETA::etas - Rate::rate/s", $stream = STDERR)
+    public function __construct($total = 1, $format = "Progress: [:bar] - :current/:total - :percent% - Elapsed::elapseds - ETA::etas - Speed::speed/s", $stream = STDERR)
     {
         // Get the terminal width
         $this->width = exec("tput cols");
@@ -160,7 +160,7 @@ class ProgressBar extends Notifier
         $this->current = $amount;
         $this->elapsed = microtime(true) - $this->startTime;
         $this->percent = $this->current / $this->total * 100;
-        $this->rate = $this->current / $this->elapsed;
+        $this->speed = $this->current / $this->elapsed;
         $this->eta = ($this->current) ? ($this->elapsed / $this->current * $this->total - $this->elapsed) : false;
         $drawElapse = microtime(true) - $this->timeSinceLastCall;
         $this->drawBar();
@@ -200,7 +200,7 @@ class ProgressBar extends Notifier
             $this->roundAndPadd($this->elapsed),
             $this->roundAndPadd($this->percent),
             $this->roundAndPadd($this->eta),
-            $this->roundAndPadd($this->rate),
+            $this->roundAndPadd($this->speed),
         );
 
         $output = str_replace($this->ouputFind, $replace, $this->format);
